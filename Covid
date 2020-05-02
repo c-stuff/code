@@ -1,0 +1,212 @@
+# -*- coding: utf-8 -*-
+"""
+Spyder Editor
+
+This is a temporary script file.
+"""
+
+
+
+import pandas as pd
+import matplotlib.pyplot as plt
+import numpy as np
+
+#Adjusted to interactive charts: tools_> Preference-> Ipython Console-> Graphics->Graphics Backend_> Backend"automative"
+
+
+
+##############################################################
+#Import Files and modify
+##############################################################
+
+
+# 1:Local csv     2:from net
+dataLoc = 2
+
+
+baseURL= "https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/"
+#downloaded csv files
+localConfirmed = "ConfirmedCovid.csv"
+localDeaths = "DeathsCovid.csv"
+localRecovered = "RecoveredCovid.csv"
+
+#download from John Hopkins files
+netConfirmed = "time_series_covid19_confirmed_global.csv"
+netDeaths = "time_series_covid19_deaths_global.csv"
+netRecovered = "time_series_covid19_recovered_global.csv"
+ 
+
+def loadData(filename): # Not used example
+    data = pd.read_csv(baseURL + filename)
+    return data
+
+
+def loadConfirmed(mode):
+    if mode == 1:
+        data = pd.read_csv(localConfirmed)
+        return data 
+    elif mode == 2:
+        data = pd.read_csv(baseURL + netConfirmed)
+        return data
+
+
+def loadDeaths(mode):
+    if mode == 1:
+        data = pd.read_csv(localDeaths)
+        return data 
+    elif mode == 2:
+        data = pd.read_csv(baseURL + netDeaths)
+        return data
+
+def loadRecovered(mode):
+    if mode == 1:
+        data = pd.read_csv(localRecovered)
+        return data 
+    elif mode == 2:
+        data = pd.read_csv(baseURL + netRecovered)
+        return data
+
+
+
+confirmed = loadConfirmed(dataLoc)
+deaths = loadDeaths(dataLoc) 
+recovered = loadRecovered(dataLoc)
+
+
+
+#adjust tables
+# Remove unneeded Long and Lat columns
+confirmed = confirmed.drop(['Lat','Long'], axis = 1)
+deaths = deaths.drop(['Lat','Long'], axis = 1)
+recovered = recovered.drop(['Lat','Long'], axis = 1)
+
+
+#create a dataframes that shows by country (remove province/state)
+confirmedCountry = confirmed.groupby(deaths['Country/Region']).aggregate('sum')
+deathsCountry = deaths.groupby(deaths['Country/Region']).aggregate('sum')
+recoveredCountry = recovered.groupby(recovered['Country/Region']).aggregate('sum')
+
+
+
+#transpose for different format
+confirmed = confirmed.T
+deaths = deaths.T
+recovered = recovered.T
+confirmedCountry = confirmedCountry.T
+deathsCountry = deathsCountry.T
+recoveredCountry = recoveredCountry.T
+
+
+
+
+
+###################################################
+#Create new datasets to analyze
+###################################################
+
+
+#Create a new dataframe to calculate the daily changes; note: created copy to keep the data structure
+confirmedDailyChange = confirmedCountry.copy()
+deathsDailyChange = deathsCountry.copy()
+recoveredDailyChange = recoveredCountry.copy()
+
+
+######
+#Calculate daily changes
+
+for day in range(1, len(confirmedCountry)):
+    confirmedDailyChange.iloc[day] = confirmedCountry.iloc[day] - confirmedCountry.iloc[day-1]
+    
+for day in range(1, len(deathsCountry)):
+    deathsDailyChange.iloc[day] = deathsCountry.iloc[day] - deathsCountry.iloc[day-1]
+    
+for day in range(1, len(confirmedCountry)):
+    recoveredDailyChange.iloc[day] = recoveredCountry.iloc[day] - recoveredCountry.iloc[day-1]
+    
+
+
+#####
+#Calculate the growth rate for confirmed cases
+
+confirmedGrowthRate = confirmedDailyChange.copy()
+
+for day in range(1, len(confirmedDailyChange)):
+    confirmedGrowthRate.iloc[day] = 100*(confirmedDailyChange.iloc[day] / confirmedCountry.iloc[day-1])
+
+#Create a smoothed growth rate; perhaps over 5 days
+smConfirmedGrowthRate = confirmedDailyChange.copy()
+smDay = 3
+for day in range(smDay, len(confirmedDailyChange)):
+    smConfirmedGrowthRate.iloc[day] = 100*((confirmedCountry.iloc[day]-confirmedCountry.iloc[day-smDay]) / confirmedCountry.iloc[day-smDay])
+
+
+
+######
+#Create the active cases
+
+activeCases = confirmedCountry.copy()
+
+for day in range(0,len(confirmedCountry)):
+    activeCases.iloc[day] = confirmedCountry.iloc[day] - deathsCountry.iloc[day] - recoveredCountry.iloc[day]
+
+    
+
+
+
+##############################################################
+#Charts
+##############################################################
+
+#set countries
+countries = ['Canada','US', 'Taiwan*', 'Japan', 'Korea, South','Spain','Italy','Mexico']
+
+
+
+#plot for all countries in the list
+#set plot design
+ax = plt.subplot()
+ax.set_facecolor('black')
+ax.figure.set_facecolor('#121212')
+ax.tick_params(axis='x', colors='white')
+ax.tick_params(axis='y', colors='white')
+ax.set_title(f'Total Cases', color='white')
+for country in countries:
+    confirmedCountry[country].plot(label=country)
+
+plt.legend(loc='upper left')
+plt.show()
+
+
+
+
+
+for country in countries:
+
+    #set plot design
+    ax = plt.subplot()
+    ax.set_facecolor('black')
+    ax.figure.set_facecolor('#121212')
+    ax.tick_params(axis='x', colors='white')
+    ax.tick_params(axis='y', colors='white', which = 'both')
+    ax.set_ylabel('Cumulative Cases (n)', color='white')
+    title = country + ': Cases and Outcomes'
+    ax.set_title(title, color='white')
+    
+    xAxis = np.arange(len(confirmedCountry))
+    
+    confirmedCountry[country].plot(color='red', label='Total Cases')
+    activeCases[country].plot(color='blue', label='Active Cases')
+    p1 = plt.bar(xAxis, recoveredCountry[country], 
+                  width = 0.8, 
+                  bottom = activeCases[country], 
+                  label = 'Recovered')   
+    p2 = plt.bar(xAxis, deathsCountry[country], 
+                  bottom = activeCases[country] + recoveredCountry[country],
+                  label = 'Deaths')
+
+    plt.legend(loc='upper left')
+    plt.show()
+
+
+
+
